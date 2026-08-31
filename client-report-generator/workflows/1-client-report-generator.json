@@ -1,0 +1,552 @@
+{
+  "name": "Client Report Generator",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "months", "triggerAtHour": 8 } ] } },
+      "id": "5ae7a6fe-0735-4269-ab1b-1533ee942f93",
+      "name": "Monthly Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [240, 128]
+    },
+    {
+      "parameters": {},
+      "id": "352b772a-8961-45bc-b68e-ed8789c3b4d4",
+      "name": "Manual Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 432]
+    },
+    {
+      "id": "679d9007-29aa-4528-8dc9-606d6ee33008",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [380, 280],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "clientName", "name": "clientName", "type": "string", "value": "Rivertown Fitness Co" },
+            { "id": "agencyName", "name": "agencyName", "type": "string", "value": "Your Agency Name" },
+            { "id": "reportTitleFormat", "name": "reportTitleFormat", "type": "string", "value": "Monthly Performance Report" },
+            { "id": "thresholdPct", "name": "thresholdPct", "type": "number", "value": 10 },
+            { "id": "websiteUrl", "name": "websiteUrl", "type": "string", "value": "https://www.example.com" },
+            { "id": "sheetId", "name": "sheetId", "type": "string", "value": "YOUR_GOOGLE_SHEET_ID" },
+            { "id": "sheetTab", "name": "sheetTab", "type": "string", "value": "Metrics" },
+            { "id": "driveParentFolderId", "name": "driveParentFolderId", "type": "string", "value": "root" },
+            { "id": "clientRecipientEmail", "name": "clientRecipientEmail", "type": "string", "value": "client@example.com" },
+            { "id": "internalNotifyEmail", "name": "internalNotifyEmail", "type": "string", "value": "you@youragency.com" },
+            { "id": "pdfEngine", "name": "pdfEngine", "type": "string", "value": "gotenberg" },
+            { "id": "gotenbergUrl", "name": "gotenbergUrl", "type": "string", "value": "http://gotenberg:3000" },
+            { "id": "pdfApiEndpoint", "name": "pdfApiEndpoint", "type": "string", "value": "https://api.pdfshift.io/v3/convert/pdf" }
+          ]
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "clientName", "name": "clientName", "type": "string", "value": "={{ $json.clientName }}" },
+            { "id": "periodLabel", "name": "periodLabel", "type": "string", "value": "={{ $now.minus({ months: 1 }).toFormat('yyyy-LL') }}" },
+            { "id": "previousPeriodLabel", "name": "previousPeriodLabel", "type": "string", "value": "={{ $now.minus({ months: 2 }).toFormat('yyyy-LL') }}" },
+            { "id": "runId", "name": "runId", "type": "string", "value": "={{ $execution.id }}" },
+            { "id": "thresholdPct", "name": "thresholdPct", "type": "number", "value": "={{ $json.thresholdPct }}" },
+            { "id": "websiteUrl", "name": "websiteUrl", "type": "string", "value": "={{ $json.websiteUrl }}" },
+            { "id": "startedAt", "name": "startedAt", "type": "string", "value": "={{ $now.toISO() }}" }
+          ]
+        }
+      },
+      "id": "2fb597bb-92d6-4366-bd02-c5279a548c3d",
+      "name": "Determine Reporting Period",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [528, 272]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": { "__rl": true, "mode": "id", "value": "YOUR_RUNLOG_DATA_TABLE_ID", "cachedResultName": "CRG_RunLog" },
+        "matchType": "allConditions",
+        "filters": { "conditions": [ { "keyName": "period", "keyValue": "={{ $json.periodLabel }}" }, { "keyName": "clientName", "keyValue": "={{ $json.clientName }}" }, { "keyName": "status", "keyValue": "success" } ] },
+        "limit": 1
+      },
+      "id": "8c0ffdea-ee0a-4481-b39f-5449a3959ee3",
+      "name": "Check Existing Report",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [800, 272],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const existing = $input.all();\nconst first = existing.length > 0 ? existing[0].json : {};\nconst reportExists = !!(first && first.id !== undefined && first.id !== null);\nconst ctx = $('Determine Reporting Period').item.json;\nreturn [{\n  json: {\n    clientName: ctx.clientName,\n    periodLabel: ctx.periodLabel,\n    previousPeriodLabel: ctx.previousPeriodLabel,\n    runId: ctx.runId,\n    thresholdPct: ctx.thresholdPct,\n    websiteUrl: ctx.websiteUrl,\n    startedAt: ctx.startedAt,\n    reportExists: reportExists,\n  },\n}];\n"
+      },
+      "id": "204b3af2-ffc9-4047-8252-fd7e72cc994f",
+      "name": "Determine Duplicate Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1088, 272]
+    },
+    {
+      "parameters": {
+        "conditions": { "combinator": "and", "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 }, "conditions": [ { "leftValue": "={{ $json.reportExists }}", "operator": { "type": "boolean", "operation": "equals" }, "rightValue": true } ] },
+        "options": {}
+      },
+      "id": "ace77600-1e53-4b10-9838-09458cbb4b08",
+      "name": "Report Already Delivered?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1360, 272]
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_LOG_RUN_WORKFLOW_ID", "cachedResultName": "CRG - Log Run" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true,
+          "value": { "runId": "={{ $json.runId }}", "clientName": "={{ $json.clientName }}", "period": "={{ $json.periodLabel }}", "status": "skipped", "durationMs": 0, "error": "" },
+          "schema": [
+            { "id": "runId", "displayName": "runId", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "clientName", "displayName": "clientName", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "period", "displayName": "period", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "status", "displayName": "status", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "durationMs", "displayName": "durationMs", "type": "number", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "error", "displayName": "error", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4a29c3d8-99d8-4fb6-ac62-7a33564f1e10",
+      "name": "Log Skipped Run",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1648, 112]
+    },
+    {
+      "parameters": {},
+      "id": "82befe95-89fa-45d1-9ae9-d9dad1b86f41",
+      "name": "End - Duplicate Prevented",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1920, 112]
+    },
+    {
+      "parameters": {},
+      "id": "8e262fee-c1ff-4632-ab3d-096e581c50ee",
+      "name": "Continue Processing",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1648, 432]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "mode": "id", "value": "={{ $('Config').item.json.sheetId }}", "cachedResultName": "CRG Sample Data - Rivertown Fitness Co" },
+        "sheetName": { "__rl": true, "mode": "name", "value": "={{ $('Config').item.json.sheetTab }}" },
+        "filtersUI": { "values": [ { "lookupColumn": "ClientName", "lookupValue": "={{ $json.clientName }}" } ] },
+        "options": {}
+      },
+      "id": "8ecf9b25-8013-4e74-ab34-39e394ea453f",
+      "name": "Read Client Metrics Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1920, 320],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_ME_SHEETS_CRED_ID", "name": "Google Sheets account" } }
+    },
+    {
+      "parameters": { "aggregate": "aggregateAllItemData", "destinationFieldName": "rows", "options": {} },
+      "id": "b2780780-10c4-45b4-b072-4572fbf1e474",
+      "name": "Aggregate Metric Rows",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [2208, 320]
+    },
+    {
+      "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} },
+      "id": "d4148e3b-0815-40fe-9a7b-5915868e6302",
+      "name": "Combine Data Sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [2480, 432]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": { "parameters": [ { "name": "url", "value": "={{ $json.websiteUrl }}" }, { "name": "strategy", "value": "mobile" } ] },
+        "options": { "timeout": 15000 }
+      },
+      "id": "f298d2e3-dcd7-4631-8c97-fa4a853872ea",
+      "name": "Fetch Site Performance Score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1920, 560],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": { "httpQueryAuth": { "id": "REPLACE_ME_PAGESPEED_CRED_ID", "name": "PageSpeed Query Auth account" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst lh = resp.lighthouseResult || {};\nconst perf = lh.categories && lh.categories.performance;\nconst scoreRaw = perf ? perf.score : null;\nconst performanceScore = (scoreRaw !== null && scoreRaw !== undefined) ? Math.round(scoreRaw * 100) : null;\nconst url = lh.requestedUrl || resp.id || null;\nreturn [{ json: { performanceScore: performanceScore, url: url } }];\n"
+      },
+      "id": "27abfd62-2767-49c9-9391-6ea823d282ed",
+      "name": "Extract Performance Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2208, 560]
+    },
+    {
+      "parameters": {
+        "jsCode": "const merged = $input.first().json;\nconst ctx = $('Determine Duplicate Status').item.json;\nconst rows = merged.rows || [];\nconst requiredCols = ['Website Sessions', 'Leads Generated', 'Conversion Rate (%)', 'Ad Spend (USD)', 'Revenue Attributed (USD)', 'New Backlinks'];\n\nconst currentPeriodRows = rows.filter((r) => r.Period === ctx.periodLabel);\nconst previousPeriodRows = rows.filter((r) => r.Period === ctx.previousPeriodLabel);\nconst currentRow = currentPeriodRows[0];\nconst previousRow = previousPeriodRows[0];\n\nlet isValid = true;\nlet validationError = '';\n\nif (currentPeriodRows.length > 1) {\n  isValid = false;\n  validationError = 'Found ' + currentPeriodRows.length + ' rows for period ' + ctx.periodLabel + ' for client ' + ctx.clientName + ' — ambiguous, expected exactly one.';\n} else if (previousPeriodRows.length > 1) {\n  isValid = false;\n  validationError = 'Found ' + previousPeriodRows.length + ' rows for the prior period ' + ctx.previousPeriodLabel + ' for client ' + ctx.clientName + ' — ambiguous, expected exactly one.';\n} else if (!currentRow) {\n  isValid = false;\n  validationError = 'No metrics row found for the current period (' + ctx.periodLabel + ') — the most recent complete calendar month — for client ' + ctx.clientName + '. The sheet may not have been updated yet.';\n} else if (!previousRow) {\n  isValid = false;\n  validationError = 'No metrics row found for the prior period (' + ctx.previousPeriodLabel + ') for client ' + ctx.clientName + '.';\n} else {\n  for (const col of requiredCols) {\n    const curVal = currentRow[col];\n    const prevVal = previousRow[col];\n    if (curVal === undefined || curVal === null || curVal === '' || isNaN(Number(curVal))) {\n      isValid = false;\n      validationError = 'Missing or non-numeric value for \"' + col + '\" in the current period row.';\n      break;\n    }\n    if (prevVal === undefined || prevVal === null || prevVal === '' || isNaN(Number(prevVal))) {\n      isValid = false;\n      validationError = 'Missing or non-numeric value for \"' + col + '\" in the prior period row.';\n      break;\n    }\n  }\n}\n\nif (isValid && (merged.performanceScore === null || merged.performanceScore === undefined)) {\n  isValid = false;\n  validationError = 'PageSpeed Insights did not return a performance score for ' + merged.url + '.';\n}\n\nreturn [{\n  json: {\n    clientName: ctx.clientName,\n    periodLabel: ctx.periodLabel,\n    previousPeriodLabel: ctx.previousPeriodLabel,\n    runId: ctx.runId,\n    thresholdPct: ctx.thresholdPct,\n    startedAt: ctx.startedAt,\n    currentRow: currentRow || {},\n    previousRow: previousRow || {},\n    externalMetric: { performanceScore: merged.performanceScore, url: merged.url },\n    isValid: isValid,\n    validationError: validationError,\n  },\n}];\n"
+      },
+      "id": "1b32d4aa-255c-4475-9157-a28fc4d86c82",
+      "name": "Validate Source Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2768, 432]
+    },
+    {
+      "parameters": {
+        "conditions": { "combinator": "and", "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 }, "conditions": [ { "leftValue": "={{ $json.isValid }}", "operator": { "type": "boolean", "operation": "equals" }, "rightValue": true } ] },
+        "options": {}
+      },
+      "id": "ad6f2d99-c402-4084-8c4f-134e593c95e1",
+      "name": "Source Data Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [3040, 432]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst metricCols = ['Website Sessions', 'Leads Generated', 'Conversion Rate (%)', 'Ad Spend (USD)', 'Revenue Attributed (USD)', 'New Backlinks'];\nconst cur = item.currentRow;\nconst prev = item.previousRow;\nconst thresholdPct = item.thresholdPct;\n\nconst metrics = metricCols.map((col) => {\n  const currentValue = Number(cur[col]);\n  const previousValue = Number(prev[col]);\n  const delta = currentValue - previousValue;\n  const pctChange = previousValue !== 0 ? (delta / Math.abs(previousValue)) * 100 : (currentValue !== 0 ? 100 : 0);\n  const flagged = Math.abs(pctChange) > thresholdPct;\n  return { name: col, currentValue: currentValue, previousValue: previousValue, delta: delta, pctChange: pctChange, flagged: flagged };\n});\n\nreturn [{\n  json: {\n    clientName: item.clientName,\n    period: item.periodLabel,\n    thresholdPct: thresholdPct,\n    runId: item.runId,\n    startedAt: item.startedAt,\n    metrics: metrics,\n    externalMetric: item.externalMetric,\n  },\n}];\n"
+      },
+      "id": "ca2e3258-b48e-4d9c-b362-a063694a7143",
+      "name": "Compute Deltas & Flag Changes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3328, 560]
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "mode": "id", "value": "models/gemini-3.6-flash", "cachedResultName": "models/gemini-3.6-flash" },
+        "messages": { "values": [ { "content": "=Client: {{ $json.clientName }}\nReporting period: {{ $json.period }}\nThreshold for a notable change: {{ $json.thresholdPct }}%\n\nMetrics (JSON): {{ JSON.stringify($json.metrics) }}\nExternal metric (site performance): {{ JSON.stringify($json.externalMetric) }}\n\nWrite the executive summary and notable changes now, following the schema exactly." } ] },
+        "jsonOutput": true,
+        "builtInTools": { "googleSearch": false, "urlContext": false, "codeExecution": false },
+        "options": {
+          "includeMergedResponse": true,
+          "systemMessage": "You are a data analyst writing an executive summary for a monthly client performance report. You will be given a JSON object containing this period's metrics, the prior period's metrics, computed deltas and percentage changes, and a flag for any metric that moved more than the configured threshold. Base your summary strictly on the numbers provided — do not invent causes, external events, or context that isn't in the data. If the cause of a change cannot be determined from the data, say so only ONCE — as a single closing sentence in the executive summary — rather than repeating that disclaimer after every metric. Individual notable_changes comments must describe what changed and by how much, in plain, varied language, WITHOUT repeating the 'not determinable from the available data' disclaimer in each one — that caveat belongs once, in the executive summary only. Respond with ONLY valid JSON matching this schema, no markdown fences, no commentary: {\"executive_summary\": string, \"notable_changes\": [{\"metric\": string, \"direction\": \"up\"|\"down\", \"change_pct\": number, \"comment\": string}], \"overall_sentiment\": \"positive\"|\"neutral\"|\"mixed\"|\"negative\"}",
+          "maxOutputTokens": 6000,
+          "temperature": 0.3,
+          "thinkingBudget": -1
+        }
+      },
+      "id": "572ee7f5-da59-446f-a674-4ecfd3c2bbb1",
+      "name": "Generate Executive Summary (Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [3600, 560],
+      "credentials": { "googlePalmApi": { "id": "REPLACE_ME_GEMINI_CRED_ID", "name": "Google Gemini (PaLM) Api account" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw0 = $input.first().json;\nconst rawText = raw0.mergedResponse ?? raw0.content ?? raw0.text ?? raw0.output ?? raw0.message ?? raw0.data ?? (typeof raw0 === 'string' ? raw0 : JSON.stringify(raw0));\nconst ctx = $('Compute Deltas & Flag Changes').item.json;\n\nlet parsed = null;\nlet parseOk = true;\nlet parseError = '';\n\nconst extractJson = (text) => {\n  let cleaned = String(text).trim();\n  const fenceMatch = cleaned.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/i);\n  if (fenceMatch) {\n    cleaned = fenceMatch[1].trim();\n  }\n  return cleaned;\n};\n\ntry {\n  const cleaned = extractJson(rawText);\n  parsed = JSON.parse(cleaned);\n  if (!parsed.executive_summary || !Array.isArray(parsed.notable_changes) || !parsed.overall_sentiment) {\n    parseOk = false;\n    parseError = 'AI response JSON is missing required fields (executive_summary, notable_changes, overall_sentiment).';\n  }\n} catch (e) {\n  parseOk = false;\n  parseError = 'Failed to parse AI response as JSON: ' + e.message;\n}\n\nreturn [{\n  json: {\n    clientName: ctx.clientName,\n    period: ctx.period,\n    thresholdPct: ctx.thresholdPct,\n    runId: ctx.runId,\n    startedAt: ctx.startedAt,\n    metrics: ctx.metrics,\n    externalMetric: ctx.externalMetric,\n    executiveSummary: parseOk ? parsed.executive_summary : '',\n    notableChanges: parseOk ? parsed.notable_changes : [],\n    overallSentiment: parseOk ? parsed.overall_sentiment : '',\n    isValid: parseOk,\n    validationError: parseError,\n  },\n}];\n"
+      },
+      "id": "0ea03735-f5eb-4a9b-be82-1ed28dbaa46f",
+      "name": "Parse & Validate AI JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3888, 560]
+    },
+    {
+      "parameters": {
+        "conditions": { "combinator": "and", "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 }, "conditions": [ { "leftValue": "={{ $json.isValid }}", "operator": { "type": "boolean", "operation": "equals" }, "rightValue": true } ] },
+        "options": {}
+      },
+      "id": "ccece211-a636-446f-9f91-d0d1712477df",
+      "name": "AI Output Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [4160, 560]
+    },
+    {
+      "parameters": { "errorMessage": "={{ $json.validationError }}" },
+      "id": "3f45c545-816e-40ea-b6ad-97500e9671fe",
+      "name": "Fail - Malformed Source Data",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [3328, 272]
+    },
+    {
+      "parameters": { "errorMessage": "={{ $json.validationError }}" },
+      "id": "53d44cc9-1d55-4586-bfd8-ba74f60ad5b0",
+      "name": "Fail - AI Output Malformed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [4448, 432]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "=Reports - {{ $('Parse & Validate AI JSON').item.json.period }}",
+        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
+        "folderId": { "__rl": true, "mode": "id", "value": "={{ $('Config').item.json.driveParentFolderId }}", "cachedResultName": "/ (Root folder)" },
+        "options": {}
+      },
+      "id": "8b3682bf-eeb1-4f4a-ad60-51fc35583c52",
+      "name": "Create Dated Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [5280, 832],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": { "googleDriveOAuth2Api": { "id": "REPLACE_ME_DRIVE_CRED_ID", "name": "Google Drive account" } }
+    },
+    {
+      "parameters": { "assignments": { "assignments": [ { "id": "folderId", "name": "folderId", "type": "string", "value": "={{ $json.id }}" } ] }, "options": {} },
+      "id": "bbae773d-d836-4c1c-9e6c-0b9ab9034ea0",
+      "name": "Use New Folder",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [5568, 832]
+    },
+    {
+      "parameters": {},
+      "id": "00c347cc-c35a-4036-aad2-d7836d5c8c17",
+      "name": "Report Folder Resolved",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [5840, 704]
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_RENDER_PDF_WORKFLOW_ID", "cachedResultName": "CRG - Render Report PDF" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "value": {
+            "runId": "={{ $('Parse & Validate AI JSON').item.json.runId }}",
+            "clientName": "={{ $('Parse & Validate AI JSON').item.json.clientName }}",
+            "period": "={{ $('Parse & Validate AI JSON').item.json.period }}",
+            "thresholdPct": "={{ $('Parse & Validate AI JSON').item.json.thresholdPct }}",
+            "metrics": "={{ $('Parse & Validate AI JSON').item.json.metrics }}",
+            "externalMetric": "={{ $('Parse & Validate AI JSON').item.json.externalMetric }}",
+            "executiveSummary": "={{ $('Parse & Validate AI JSON').item.json.executiveSummary }}",
+            "notableChanges": "={{ $('Parse & Validate AI JSON').item.json.notableChanges }}",
+            "overallSentiment": "={{ $('Parse & Validate AI JSON').item.json.overallSentiment }}",
+            "agencyName": "={{ $('Config').item.json.agencyName }}",
+            "reportTitleFormat": "={{ $('Config').item.json.reportTitleFormat }}",
+            "pdfEngine": "={{ $('Config').item.json.pdfEngine }}",
+            "gotenbergUrl": "={{ $('Config').item.json.gotenbergUrl }}",
+            "pdfApiEndpoint": "={{ $('Config').item.json.pdfApiEndpoint }}"
+          },
+          "schema": [
+            { "id": "runId", "displayName": "runId", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "clientName", "displayName": "clientName", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "period", "displayName": "period", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "thresholdPct", "displayName": "thresholdPct", "type": "number", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "metrics", "displayName": "metrics", "type": "array", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "externalMetric", "displayName": "externalMetric", "type": "object", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "executiveSummary", "displayName": "executiveSummary", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "notableChanges", "displayName": "notableChanges", "type": "array", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "overallSentiment", "displayName": "overallSentiment", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "agencyName", "displayName": "agencyName", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "reportTitleFormat", "displayName": "reportTitleFormat", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "pdfEngine", "displayName": "pdfEngine", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "gotenbergUrl", "displayName": "gotenbergUrl", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "pdfApiEndpoint", "displayName": "pdfApiEndpoint", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a0eac4a7-6be1-4b2f-a014-ecabce862d71",
+      "name": "Render PDF",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [6128, 704]
+    },
+    {
+      "parameters": {
+        "name": "={{ $('Parse & Validate AI JSON').item.json.clientName }} - {{ $('Parse & Validate AI JSON').item.json.period }}.pdf",
+        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
+        "folderId": { "__rl": true, "mode": "id", "value": "={{ $('Report Folder Resolved').item.json.folderId }}" },
+        "options": {}
+      },
+      "id": "b754b8a3-35c5-4d58-965c-50c8f51cf8bc",
+      "name": "Upload PDF Report",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [6400, 592],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": { "googleDriveOAuth2Api": { "id": "REPLACE_ME_DRIVE_CRED_ID", "name": "Google Drive account" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Config').item.json.clientRecipientEmail }}",
+        "subject": "=Your {{ $('Parse & Validate AI JSON').item.json.period }} Performance Report — {{ $('Parse & Validate AI JSON').item.json.clientName }}",
+        "message": "=<p>Hi there,</p><p>Attached is the {{ $('Parse & Validate AI JSON').item.json.period }} performance report for {{ $('Parse & Validate AI JSON').item.json.clientName }}.</p><p>{{ $('Parse & Validate AI JSON').item.json.executiveSummary }}</p><p>Let us know if you have any questions.</p>",
+        "options": { "appendAttribution": false, "attachmentsUi": { "attachmentsBinary": [{}] } }
+      },
+      "id": "f227b9e1-bf70-40f9-a02e-9fd99ce46a09",
+      "name": "Email Report to Client",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [6400, 832],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_ME_GMAIL_CRED_ID", "name": "Gmail account" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Config').item.json.internalNotifyEmail }}",
+        "subject": "=CRG Run Complete — {{ $('Parse & Validate AI JSON').item.json.clientName }} ({{ $('Parse & Validate AI JSON').item.json.period }})",
+        "message": "=<h3>Client Report Generator — Run Complete</h3><p><strong>Client:</strong> {{ $('Parse & Validate AI JSON').item.json.clientName }}</p><p><strong>Period:</strong> {{ $('Parse & Validate AI JSON').item.json.period }}</p><p><strong>Run ID:</strong> {{ $('Parse & Validate AI JSON').item.json.runId }}</p><p><strong>Sentiment:</strong> {{ $('Parse & Validate AI JSON').item.json.overallSentiment }}</p><p><strong>Report file:</strong> <a href=\"{{ $json.webViewLink }}\">{{ $json.name }}</a></p>",
+        "options": { "appendAttribution": false }
+      },
+      "id": "1668297d-a16f-4c02-a837-5e10dafdf717",
+      "name": "Send Internal Completion Notice",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [6688, 592],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_ME_GMAIL_CRED_ID", "name": "Gmail account" } }
+    },
+    {
+      "parameters": { "jsCode": "const startedAt = $('Determine Reporting Period').item.json.startedAt;\nconst durationMs = new Date().getTime() - new Date(startedAt).getTime();\nreturn [{ json: { durationMs: durationMs } }];\n" },
+      "id": "0a0fe59e-d20e-425f-a6c4-ccbfe22683e3",
+      "name": "Compute Run Duration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [6960, 592]
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_LOG_RUN_WORKFLOW_ID", "cachedResultName": "CRG - Log Run" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true,
+          "value": { "runId": "={{ $('Parse & Validate AI JSON').item.json.runId }}", "clientName": "={{ $('Parse & Validate AI JSON').item.json.clientName }}", "period": "={{ $('Parse & Validate AI JSON').item.json.period }}", "status": "success", "durationMs": "={{ $json.durationMs }}", "error": "" },
+          "schema": [
+            { "id": "runId", "displayName": "runId", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "clientName", "displayName": "clientName", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "period", "displayName": "period", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "status", "displayName": "status", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "durationMs", "displayName": "durationMs", "type": "number", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "error", "displayName": "error", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true }
+          ]
+        },
+        "options": {}
+      },
+      "id": "966bbf83-4423-4d1b-bdda-f3c87d9f572f",
+      "name": "Log Successful Run",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [7248, 592]
+    },
+    {
+      "parameters": { "content": "## Idempotency guard\n\"Check Existing Report\" uses `alwaysOutputData: true` so a no-match still produces one item to route on (the zero-item-safety trick). \"Determine Duplicate Status\" then checks whether that item has a real `id` — present only on an actual match — rather than trusting item count.", "height": 200, "width": 860, "color": 4 },
+      "id": "1a2085d2-bf0f-43f5-8327-386ba65ad8cf",
+      "name": "Sticky Note b35362bf",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [752, 224]
+    },
+    {
+      "parameters": { "content": "## Config-driven setup\nAll per-client values (client name, agency name, sheet ID, threshold, recipient emails, PDF engine choice) live in the Config node at the start of this workflow — that is the only place to edit for a new client. Every node downstream reads from Config via $('Config').item.json.* instead of hardcoding values. Credentials (Sheets/Drive/Gmail/Gemini/PageSpeed) are separate from Config — pick or create each one on its own node.", "height": 440, "width": 300, "color": 6 },
+      "id": "98a8d0ec-dbb4-408a-8d4e-2222e5d6a28c",
+      "name": "Sticky Note 63e0ceee",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1872, 272]
+    },
+    {
+      "parameters": { "content": "## Validate-then-stop pattern\nComplex validation logic lives in a Code node (real checks: row presence, numeric types, PageSpeed score present) which sets `isValid` + a human-readable `validationError`. The IF just reads that boolean, keeping the condition itself trivial and the failure message specific. Stop and Error here is what lets CRG - Error Alert catch it with a clear message.", "height": 360, "width": 860, "color": 3 },
+      "id": "e9f85616-3ae3-4c6e-bd6d-df89361140a1",
+      "name": "Sticky Note 9f1fc335",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2720, 224]
+    },
+    {
+      "parameters": { "content": "## AI output is untrusted until parsed\nThe Gemini node's response arrives in mergedResponse (confirmed via live testing). This Code node still defensively checks content/text/output/message as a fallback, strips ``` fences, JSON.parse's in a try/catch, and checks the three required keys exist before trusting the result. Malformed AI output fails the run (via Stop and Error) rather than shipping a broken report.", "height": 340, "width": 1140, "color": 3 },
+      "id": "0ca90a9a-4c8b-4769-b475-8fc733cdce29",
+      "name": "Sticky Note 05d8ca41",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [3552, 384]
+    },
+    {
+      "parameters": { "content": "## Dated folder: always-create (temporary)\nThe Google Drive OAuth credential currently has a restricted scope (drive.file) that blocks the folder *search* call (\"granted scopes do not give access to all of the requested spaces\"). Find-or-create is disabled for now — every run creates a fresh \"Reports - <period>\" folder, so idempotent folder reuse is temporarily off. Reauthorize the Drive credential with full Drive access and reintroduce the search → IF → branch to restore it.", "height": 200, "width": 900 },
+      "id": "9f416dda-b237-46c9-ad0a-2f3afa04ce33",
+      "name": "Sticky Note 4059396e",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [4400, 544]
+    },
+    {
+      "parameters": { "content": "## Why Upload and Email both branch directly off Render PDF\nGoogle Drive/Gmail action nodes replace $json with their own response and do not reliably pass binary data through. Both nodes read the PDF straight from Render PDF's own output instead of after each other, and pull the report fields (clientName, period, summary) via $('Parse & Validate AI JSON') since that data no longer lives on $json this far downstream.", "height": 440, "width": 580, "color": 5 },
+      "id": "9a4a350f-4745-46b1-b65d-2cf75aafb7f6",
+      "name": "Sticky Note fea1a329",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [6080, 544]
+    }
+  ],
+  "connections": {
+    "Monthly Schedule Trigger": { "main": [ [ { "node": "Config", "type": "main", "index": 0 } ] ] },
+    "Manual Demo Trigger": { "main": [ [ { "node": "Config", "type": "main", "index": 0 } ] ] },
+    "Config": { "main": [ [ { "node": "Determine Reporting Period", "type": "main", "index": 0 } ] ] },
+    "Determine Reporting Period": { "main": [ [ { "node": "Check Existing Report", "type": "main", "index": 0 } ] ] },
+    "Check Existing Report": { "main": [ [ { "node": "Determine Duplicate Status", "type": "main", "index": 0 } ] ] },
+    "Determine Duplicate Status": { "main": [ [ { "node": "Report Already Delivered?", "type": "main", "index": 0 } ] ] },
+    "Report Already Delivered?": { "main": [ [ { "node": "Log Skipped Run", "type": "main", "index": 0 } ], [ { "node": "Continue Processing", "type": "main", "index": 0 } ] ] },
+    "Log Skipped Run": { "main": [ [ { "node": "End - Duplicate Prevented", "type": "main", "index": 0 } ] ] },
+    "Continue Processing": { "main": [ [ { "node": "Read Client Metrics Sheet", "type": "main", "index": 0 }, { "node": "Fetch Site Performance Score", "type": "main", "index": 0 } ] ] },
+    "Read Client Metrics Sheet": { "main": [ [ { "node": "Aggregate Metric Rows", "type": "main", "index": 0 } ] ] },
+    "Aggregate Metric Rows": { "main": [ [ { "node": "Combine Data Sources", "type": "main", "index": 0 } ] ] },
+    "Fetch Site Performance Score": { "main": [ [ { "node": "Extract Performance Score", "type": "main", "index": 0 } ] ] },
+    "Extract Performance Score": { "main": [ [ { "node": "Combine Data Sources", "type": "main", "index": 1 } ] ] },
+    "Combine Data Sources": { "main": [ [ { "node": "Validate Source Data", "type": "main", "index": 0 } ] ] },
+    "Validate Source Data": { "main": [ [ { "node": "Source Data Valid?", "type": "main", "index": 0 } ] ] },
+    "Source Data Valid?": { "main": [ [ { "node": "Compute Deltas & Flag Changes", "type": "main", "index": 0 } ], [ { "node": "Fail - Malformed Source Data", "type": "main", "index": 0 } ] ] },
+    "Compute Deltas & Flag Changes": { "main": [ [ { "node": "Generate Executive Summary (Gemini)", "type": "main", "index": 0 } ] ] },
+    "Generate Executive Summary (Gemini)": { "main": [ [ { "node": "Parse & Validate AI JSON", "type": "main", "index": 0 } ] ] },
+    "Parse & Validate AI JSON": { "main": [ [ { "node": "AI Output Valid?", "type": "main", "index": 0 } ] ] },
+    "AI Output Valid?": { "main": [ [ { "node": "Create Dated Folder", "type": "main", "index": 0 } ], [ { "node": "Fail - AI Output Malformed", "type": "main", "index": 0 } ] ] },
+    "Create Dated Folder": { "main": [ [ { "node": "Use New Folder", "type": "main", "index": 0 } ] ] },
+    "Use New Folder": { "main": [ [ { "node": "Report Folder Resolved", "type": "main", "index": 0 } ] ] },
+    "Report Folder Resolved": { "main": [ [ { "node": "Render PDF", "type": "main", "index": 0 } ] ] },
+    "Render PDF": { "main": [ [ { "node": "Upload PDF Report", "type": "main", "index": 0 }, { "node": "Email Report to Client", "type": "main", "index": 0 } ] ] },
+    "Upload PDF Report": { "main": [ [ { "node": "Send Internal Completion Notice", "type": "main", "index": 0 } ] ] },
+    "Send Internal Completion Notice": { "main": [ [ { "node": "Compute Run Duration", "type": "main", "index": 0 } ] ] },
+    "Compute Run Duration": { "main": [ [ { "node": "Log Successful Run", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "REPLACE_WITH_ERROR_ALERT_WORKFLOW_ID",
+    "executionTimeout": 600,
+    "binaryMode": "separate"
+  },
+  "pinData": {}
+}

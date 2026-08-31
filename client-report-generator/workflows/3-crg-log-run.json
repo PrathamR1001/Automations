@@ -1,0 +1,66 @@
+{
+  "name": "CRG - Log Run",
+  "nodes": [
+    {
+      "id": "33078b8f-995d-454e-a630-04318a4c1efd",
+      "name": "Receive Run Data",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            { "name": "runId", "type": "string" },
+            { "name": "clientName", "type": "string" },
+            { "name": "period", "type": "string" },
+            { "name": "status", "type": "string" },
+            { "name": "durationMs", "type": "number" },
+            { "name": "error", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c2cc849f-77e2-46bd-a969-64071228f372",
+      "name": "Upsert Run Log Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [540, 300],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": { "__rl": true, "mode": "id", "value": "YOUR_RUNLOG_DATA_TABLE_ID", "cachedResultName": "CRG_RunLog" },
+        "matchType": "allConditions",
+        "filters": { "conditions": [ { "keyName": "runId", "condition": "eq", "keyValue": "={{ $json.runId }}" } ] },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["runId"],
+          "value": { "runId": "={{ $json.runId }}", "timestamp": "={{ $now.toISO() }}", "clientName": "={{ $json.clientName }}", "period": "={{ $json.period }}", "status": "={{ $json.status }}", "durationMs": "={{ $json.durationMs }}", "error": "={{ $json.error }}" },
+          "schema": [
+            { "id": "runId", "displayName": "runId", "type": "string", "defaultMatch": true, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "timestamp", "displayName": "timestamp", "type": "dateTime", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "clientName", "displayName": "clientName", "type": "string", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "period", "displayName": "period", "type": "string", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "status", "displayName": "status", "type": "string", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "durationMs", "displayName": "durationMs", "type": "number", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "error", "displayName": "error", "type": "string", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cae28510-97d8-42e6-af65-9b2a239d168f",
+      "name": "Sticky Note 26865ece",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [190, 250],
+      "parameters": { "content": "## CRG - Log Run\nCalled by the main workflow (on skip/success) and by CRG - Error Alert (on failure).\nUpserts by `runId` so a retried run overwrites its own log row instead of creating duplicates.", "color": 4, "width": 600, "height": 200 }
+    }
+  ],
+  "connections": {
+    "Receive Run Data": { "main": [ [ { "node": "Upsert Run Log Row", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

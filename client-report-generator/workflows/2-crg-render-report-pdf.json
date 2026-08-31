@@ -1,0 +1,184 @@
+{
+  "name": "CRG - Render Report PDF",
+  "nodes": [
+    {
+      "id": "d503526a-d850-40e2-b8c3-d1e7674b7d8a",
+      "name": "Receive Report Data",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            { "name": "runId", "type": "string" },
+            { "name": "clientName", "type": "string" },
+            { "name": "period", "type": "string" },
+            { "name": "thresholdPct", "type": "number" },
+            { "name": "metrics", "type": "array" },
+            { "name": "externalMetric", "type": "object" },
+            { "name": "executiveSummary", "type": "string" },
+            { "name": "notableChanges", "type": "array" },
+            { "name": "overallSentiment", "type": "string" },
+            { "name": "agencyName", "type": "string" },
+            { "name": "reportTitleFormat", "type": "string" },
+            { "name": "pdfEngine", "type": "string" },
+            { "name": "gotenbergUrl", "type": "string" },
+            { "name": "pdfApiEndpoint", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fab4f90a-8096-47b9-9d14-3ffc98b67203",
+      "name": "Prepare HTML Report Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [540, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const item = $input.first().json;\nconst metrics = item.metrics || [];\nconst notableChanges = item.notableChanges || [];\n\nconst fmtNum = (n) => {\n  if (n === null || n === undefined || isNaN(n)) return 'N/A';\n  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });\n};\n\nconst fmtPct = (n) => {\n  if (n === null || n === undefined || isNaN(n)) return 'N/A';\n  const sign = n > 0 ? '+' : '';\n  return sign + Number(n).toFixed(1) + '%';\n};\n\nconst metricsTableRowsHtml = metrics.map((m) => {\n  const up = (m.pctChange || 0) >= 0;\n  const trendClass = up ? 'trend-up' : 'trend-down';\n  const barClass = up ? 'bar-up' : 'bar-down';\n  const flagBadge = m.flagged ? ' <span class=\"flag-badge\">FLAGGED</span>' : '';\n  const magnitude = Math.max(6, Math.min(Math.abs(m.pctChange || 0), 40) / 40 * 100);\n  return '<tr><td class=\"metric-name\">' + m.name + '</td><td class=\"metric-value\">' + fmtNum(m.previousValue) + '</td><td class=\"metric-value\">' + fmtNum(m.currentValue) + '</td><td class=\"metric-delta ' + trendClass + '\">' + fmtPct(m.pctChange) + flagBadge + '</td><td class=\"metric-bar-cell\"><div class=\"bar-track\"><div class=\"bar-fill ' + barClass + '\" style=\"width:' + magnitude.toFixed(0) + '%\"></div></div></td></tr>';\n}).join('\\n');\n\nconst notableChangesListHtml = notableChanges.length\n  ? notableChanges.map((c) => '<li><strong>' + c.metric + '</strong> moved ' + c.direction + ' ' + fmtPct(c.change_pct) + ' &mdash; ' + c.comment + '</li>').join('\\n')\n  : '<li>No notable changes above threshold this period.</li>';\n\nconst sentimentColors = { positive: '#1a7f4e', neutral: '#5b6472', mixed: '#a3690a', negative: '#b23b3b' };\nconst sentimentColor = sentimentColors[item.overallSentiment] || sentimentColors.neutral;\n\nconst now = new Date();\nconst generatedDateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });\nconst agencyInitial = (item.agencyName || 'A').trim().charAt(0).toUpperCase();\n\nreturn [{\n  json: Object.assign({}, item, {\n    metricsTableRowsHtml: metricsTableRowsHtml,\n    notableChangesListHtml: notableChangesListHtml,\n    sentimentColor: sentimentColor,\n    generatedDateStr: generatedDateStr,\n    agencyInitial: agencyInitial,\n  }),\n}];\n"
+      }
+    },
+    {
+      "id": "746155c7-0b43-4c79-be46-c1788dbe2302",
+      "name": "Build Branded HTML Report",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [840, 300],
+      "parameters": {
+        "operation": "generateHtmlTemplate",
+        "html": "=<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\" />\n<style>\n  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }\n  body { margin: 0; font-family: \"Helvetica Neue\", Arial, sans-serif; color: #1f2430; background: #ffffff; }\n  .page { padding: 26px 44px; }\n  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #14213d; padding-bottom: 10px; margin-bottom: 16px; }\n  .brand { display: flex; align-items: center; gap: 9px; font-size: 20px; font-weight: 700; letter-spacing: 0.3px; color: #14213d; }\n  .brand-mark { width: 30px; height: 30px; border-radius: 8px; background-color: #14213d; background-image: linear-gradient(135deg, #14213d, #2a3f6b); color: #fca311; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; }\n  .report-meta { text-align: right; font-size: 12.5px; color: #5b6472; }\n  .report-meta .client-name { font-size: 15px; font-weight: 600; color: #14213d; margin-bottom: 2px; }\n  h1.title { font-size: 20px; margin: 0 0 2px 0; color: #14213d; }\n  .subtitle { font-size: 12px; color: #5b6472; margin: 0 0 16px 0; }\n  .card { border: 1px solid #e3e6ec; border-radius: 7px; margin-bottom: 14px; page-break-inside: avoid; overflow: hidden; }\n  .card-header { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; color: #5b6472; font-weight: 700; padding: 8px 16px; background-color: #f7f8fb; border-bottom: 1px solid #e3e6ec; }\n  .summary-card { border-left: 4px solid {{ $json.sentimentColor }}; }\n  .summary-card .card-body { padding: 12px 16px; }\n  .sentiment-badge { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #fff; background-color: {{ $json.sentimentColor }}; padding: 2px 9px; border-radius: 12px; margin-bottom: 7px; }\n  .summary-card p { margin: 0; font-size: 12.5px; line-height: 1.48; color: #2a2f3a; }\n  .changes-card .card-body { padding: 10px 16px 12px 16px; }\n  ul.changes-list { margin: 0; padding-left: 16px; font-size: 11.8px; line-height: 1.42; color: #2a2f3a; }\n  ul.changes-list li { margin-bottom: 4px; }\n  .table-card .card-body { padding: 0; }\n  table.metrics-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }\n  table.metrics-table th { text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.4px; color: #5b6472; padding: 7px 16px; background-color: #f7f8fb; }\n  table.metrics-table td { padding: 6px 16px; border-top: 1px solid #ecedf1; vertical-align: middle; }\n  table.metrics-table tr { page-break-inside: avoid; }\n  .metric-name { font-weight: 600; color: #1f2430; }\n  .metric-value { color: #3a4050; }\n  .metric-delta { font-weight: 700; white-space: nowrap; }\n  .trend-up { color: #1a7f4e; }\n  .trend-down { color: #b23b3b; }\n  .flag-badge { display: inline-block; font-size: 8px; font-weight: 700; background-color: #fca311; color: #14213d; padding: 1px 6px; border-radius: 8px; margin-left: 4px; vertical-align: middle; }\n  .metric-bar-cell { width: 90px; }\n  .bar-track { background-color: #ecedf1; border-radius: 3px; height: 6px; width: 100%; overflow: hidden; }\n  .bar-fill { height: 100%; border-radius: 3px; }\n  .bar-up { background-color: #1a7f4e; }\n  .bar-down { background-color: #b23b3b; }\n  .external-metric-box { display: flex; justify-content: space-between; background-color: #14213d; color: #fff; border-radius: 7px; padding: 10px 18px; margin-bottom: 14px; }\n  .external-metric-box .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #b9c2d4; }\n  .external-metric-box .value { font-size: 19px; font-weight: 700; margin-top: 2px; }\n  .footer { padding-top: 8px; border-top: 1px solid #dfe3ea; font-size: 9px; color: #9aa1ad; display: flex; justify-content: space-between; }\n</style>\n</head>\n<body>\n  <div class=\"page\">\n    <div class=\"header\">\n      <div class=\"brand\"><div class=\"brand-mark\">{{ $json.agencyInitial }}</div><div>{{ $json.agencyName }}</div></div>\n      <div class=\"report-meta\">\n        <div class=\"client-name\">{{ $json.clientName }}</div>\n        <div>{{ $json.reportTitleFormat }}</div>\n      </div>\n    </div>\n    <h1 class=\"title\">Reporting Period: {{ $json.period }}</h1>\n    <p class=\"subtitle\">Generated {{ $json.generatedDateStr }} &middot; Run ID {{ $json.runId }}</p>\n\n    <div class=\"card summary-card\">\n      <div class=\"card-body\">\n        <span class=\"sentiment-badge\">{{ $json.overallSentiment }}</span>\n        <p>{{ $json.executiveSummary }}</p>\n      </div>\n    </div>\n\n    <div class=\"card changes-card\">\n      <div class=\"card-header\">Notable Changes</div>\n      <div class=\"card-body\">\n        <ul class=\"changes-list\">\n          {{ $json.notableChangesListHtml }}\n        </ul>\n      </div>\n    </div>\n\n    <div class=\"card table-card\">\n      <div class=\"card-header\">Metrics &mdash; Period over Period</div>\n      <div class=\"card-body\">\n        <table class=\"metrics-table\">\n          <thead><tr><th>Metric</th><th>Prior Period</th><th>Current Period</th><th>Change</th><th>Trend</th></tr></thead>\n          <tbody>\n            {{ $json.metricsTableRowsHtml }}\n          </tbody>\n        </table>\n      </div>\n    </div>\n\n    <div class=\"external-metric-box\">\n      <div>\n        <div class=\"label\">Website Performance Score</div>\n        <div class=\"value\">{{ $json.externalMetric.performanceScore }}/100</div>\n      </div>\n      <div style=\"text-align:right\">\n        <div class=\"label\">Source</div>\n        <div style=\"font-size:11.5px; margin-top:2px;\">Google PageSpeed Insights &middot; {{ $json.externalMetric.url }}</div>\n      </div>\n    </div>\n    <div class=\"footer\">\n      <div>Notable changes are flagged when a metric moves more than {{ $json.thresholdPct }}% period over period.</div>\n      <div>Generated automatically &mdash; reference implementation.</div>\n    </div>\n  </div>\n</body>\n</html>"
+      }
+    },
+    {
+      "id": "21ea0f8c-2583-4fe0-9b73-ba62955f67da",
+      "name": "Convert HTML to Binary File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const html = $input.first().json.html;\nconst base64 = Buffer.from(html, 'utf-8').toString('base64');\nreturn [{\n  json: {},\n  binary: {\n    data: {\n      data: base64,\n      mimeType: 'text/html',\n      fileName: 'index.html',\n      fileExtension: 'html',\n    },\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "b5ac3180-3f37-47c0-8ec6-7390d75b82ba",
+      "name": "PDF Engine: Gotenberg or API?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1440, 300],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 },
+          "conditions": [ { "leftValue": "={{ $('Prepare HTML Report Data').item.json.pdfEngine }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "gotenberg" } ]
+        }
+      }
+    },
+    {
+      "id": "d01818d3-e333-4197-8761-011253eebb6e",
+      "name": "Convert HTML to PDF (Gotenberg)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1740, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare HTML Report Data').item.json.gotenbergUrl }}/forms/chromium/convert/html",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": { "parameters": [ { "parameterType": "formBinaryData", "name": "files", "inputDataFieldName": "data" }, { "parameterType": "formData", "name": "printBackground", "value": "true" } ] },
+        "options": { "response": { "response": { "fullResponse": false, "neverError": false, "responseFormat": "file", "outputPropertyName": "data" } }, "timeout": 30000 }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "id": "27d06faa-64ff-4620-8699-c69b9760ec51",
+      "name": "Convert HTML to PDF (PDFShift API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1740, 420],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare HTML Report Data').item.json.pdfApiEndpoint }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"source\": $('Build Branded HTML Report').item.json.html } }}",
+        "options": { "response": { "response": { "fullResponse": false, "neverError": false, "responseFormat": "file", "outputPropertyName": "data" } }, "timeout": 30000 }
+      },
+      "onError": "continueErrorOutput",
+      "credentials": { "httpHeaderAuth": { "id": "REPLACE_ME_PDFSHIFT_CRED_ID", "name": "PDFShift API" } }
+    },
+    {
+      "id": "e60bba03-73b4-4c9a-9969-57f5bf024f3f",
+      "name": "Format PDFShift Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1740, 560],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json;\nconst rawMsg = raw.error || raw.message || (raw.error && raw.error.message) || JSON.stringify(raw);\nconst friendly = 'PDF rendering via the hosted API (PDFShift) failed: ' + rawMsg + '. If the PDFShift credential has not been configured yet, add a Header Auth credential (Header Name: X-API-Key, Header Value: your PDFShift key) to the \"Convert HTML to PDF (PDFShift API)\" node, or set Config.pdfEngine back to \"gotenberg\".';\nreturn [{ json: { friendlyError: friendly } }];\n"
+      }
+    },
+    {
+      "id": "3744c398-c2ed-4445-9978-eae76e27fdac",
+      "name": "Fail - PDF API Engine Error",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [2040, 560],
+      "parameters": { "errorType": "errorMessage", "errorMessage": "={{ $json.friendlyError }}" }
+    },
+    {
+      "id": "07be1b76-fbf0-47e4-aee1-2836b8132a8c",
+      "name": "Sticky Note 60865635",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [190, 250],
+      "parameters": { "content": "## CRG - Render Report PDF\nCalled by the main workflow via Execute Sub-workflow. Pure function: report data in, PDF binary out. Reusable for other report types since the HTML/PDF logic lives here, not in the main canvas.", "color": 4, "width": 600, "height": 200 }
+    },
+    {
+      "id": "8f979648-131d-4b00-8c6b-421f1e890947",
+      "name": "Sticky Note c5dc3730",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1090, 250],
+      "parameters": { "content": "## Binary file trick\nGotenberg's Chromium route requires a real multipart file part named with an .html filename — a plain text field is rejected. The Code node builds that binary manually (base64 + mimeType + fileName) so no Convert-to-File node or extra credential is needed here.\n\nRetry: 3 attempts, 3s apart, 30s timeout — covers a Gotenberg cold start.", "color": 3, "width": 600, "height": 200 }
+    },
+    {
+      "id": "4bee464c-a68f-4261-8f7d-9493222a9d05",
+      "name": "Sticky Note Gotenberg Option",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1660, 60],
+      "parameters": { "content": "Option A: Self-hosted Gotenberg. No per-document cost, documents never leave your infrastructure. Requires Docker; works on self-hosted n8n only, not n8n Cloud. This is the default engine (Config.pdfEngine = gotenberg).", "color": 4, "width": 340, "height": 200 }
+    },
+    {
+      "id": "dc3636f6-f1ba-4981-9947-9ec646bb44df",
+      "name": "Sticky Note PDFShift Option",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1660, 640],
+      "parameters": { "content": "Option B: Hosted API (PDFShift). Works anywhere including n8n Cloud, no infrastructure to run. Per-document cost (free tier: 50 documents per month, no card required, then paid). Your HTML/data passes through a third party. Switch by setting Config.pdfEngine to api. Authenticated via an httpHeaderAuth credential (header name X-API-Key), never a hardcoded key.\n\nSTATUS: fully built and configured, but NOT yet tested with a real PDFShift account -- no credential exists in the reference instance this was built and tested in.\n\nTwo failure layers: (1) if the credential is entirely missing/unbound, n8n rejects the run before this node executes at all -- CRG - Error Alert detects that specific case and rewrites the alert into a plain-language message telling you to add the credential. (2) if a credential IS configured but the call still fails (expired key, PDFShift outage, rate limit), THAT is a normal node error, caught here by Format PDFShift Failure / Fail - PDF API Engine Error with the same kind of clear message.", "color": 5, "width": 360, "height": 340 }
+    }
+  ],
+  "connections": {
+    "Receive Report Data": { "main": [ [ { "node": "Prepare HTML Report Data", "type": "main", "index": 0 } ] ] },
+    "Prepare HTML Report Data": { "main": [ [ { "node": "Build Branded HTML Report", "type": "main", "index": 0 } ] ] },
+    "Build Branded HTML Report": { "main": [ [ { "node": "Convert HTML to Binary File", "type": "main", "index": 0 } ] ] },
+    "Convert HTML to Binary File": { "main": [ [ { "node": "PDF Engine: Gotenberg or API?", "type": "main", "index": 0 } ] ] },
+    "PDF Engine: Gotenberg or API?": { "main": [ [ { "node": "Convert HTML to PDF (Gotenberg)", "type": "main", "index": 0 } ], [ { "node": "Convert HTML to PDF (PDFShift API)", "type": "main", "index": 0 } ] ] },
+    "Convert HTML to PDF (PDFShift API)": { "main": [ null, [ { "node": "Format PDFShift Failure", "type": "main", "index": 0 } ] ] },
+    "Format PDFShift Failure": { "main": [ [ { "node": "Fail - PDF API Engine Error", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
