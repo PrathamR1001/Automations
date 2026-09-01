@@ -1,0 +1,151 @@
+{
+  "name": "QTD - Render Quote PDF",
+  "nodes": [
+    {
+      "id": "d503526a-d850-40e2-b8c3-d1e7674b7d8a",
+      "name": "Receive Quote Data",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            { "name": "runId", "type": "string" },
+            { "name": "enquiryId", "type": "string" },
+            { "name": "prospectName", "type": "string" },
+            { "name": "email", "type": "string" },
+            { "name": "phone", "type": "string" },
+            { "name": "propertyAddress", "type": "string" },
+            { "name": "propertySizeSqFt", "type": "number" },
+            { "name": "scopeSummary", "type": "string" },
+            { "name": "lineItems", "type": "array" },
+            { "name": "clarifyingAssumptions", "type": "array" },
+            { "name": "totals", "type": "object" },
+            { "name": "companyName", "type": "string" },
+            { "name": "brandName", "type": "string" },
+            { "name": "pdfEngine", "type": "string" },
+            { "name": "gotenbergUrl", "type": "string" },
+            { "name": "pdfApiEndpoint", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fab4f90a-8096-47b9-9d14-3ffc98b67203",
+      "name": "Prepare HTML Quote Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [540, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const item = $input.first().json;\nconst lineItems = item.lineItems || [];\nconst assumptions = item.clarifyingAssumptions || [];\nconst totals = item.totals || {};\n\nconst fmtMoney = (n) => {\n  if (n === null || n === undefined || isNaN(n)) return 'N/A';\n  return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\n};\n\nconst lineItemsTableRowsHtml = lineItems.map((li) => {\n  return '<tr><td class=\"item-desc\">' + li.description + '</td><td class=\"item-qty\">' + li.quantity + ' ' + li.unit + '</td><td class=\"item-rate\">' + fmtMoney(li.unitRate) + '</td><td class=\"item-total\">' + fmtMoney(li.lineTotal) + '</td></tr>';\n}).join('\\n');\n\nconst assumptionsListHtml = assumptions.length\n  ? assumptions.map((a) => '<li>' + a + '</li>').join('\\n')\n  : '<li>No additional assumptions were required beyond the details provided.</li>';\n\nconst now = new Date();\nconst generatedDateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });\nconst validUntil = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);\nconst validUntilStr = validUntil.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });\nconst companyInitial = (item.brandName || item.companyName || 'Q').trim().charAt(0).toUpperCase();\n\nreturn [{\n  json: Object.assign({}, item, {\n    lineItemsTableRowsHtml: lineItemsTableRowsHtml,\n    assumptionsListHtml: assumptionsListHtml,\n    subtotalFmt: fmtMoney(totals.subtotal),\n    discountAmountFmt: fmtMoney(totals.discountAmount),\n    discountPct: totals.discountPct || 0,\n    grandTotalFmt: fmtMoney(totals.grandTotal),\n    generatedDateStr: generatedDateStr,\n    validUntilStr: validUntilStr,\n    companyInitial: companyInitial,\n  }),\n}];\n"
+      }
+    },
+    {
+      "id": "746155c7-0b43-4c79-be46-c1788dbe2302",
+      "name": "Build Branded HTML Quote",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [840, 300],
+      "parameters": {
+        "operation": "generateHtmlTemplate",
+        "html": "=<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\" />\n<style>\n  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }\n  body { margin: 0; font-family: \"Helvetica Neue\", Arial, sans-serif; color: #1f2430; background: #ffffff; }\n  .page { padding: 26px 44px; }\n  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #14532d; padding-bottom: 10px; margin-bottom: 16px; }\n  .brand { display: flex; align-items: center; gap: 9px; font-size: 20px; font-weight: 700; letter-spacing: 0.3px; color: #14532d; }\n  .brand-mark { width: 30px; height: 30px; border-radius: 8px; background-color: #14532d; background-image: linear-gradient(135deg, #14532d, #1f7a42); color: #ffd166; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; }\n  .quote-meta { text-align: right; font-size: 12.5px; color: #5b6472; }\n  .quote-meta .prospect-name { font-size: 15px; font-weight: 600; color: #14532d; margin-bottom: 2px; }\n  h1.title { font-size: 20px; margin: 0 0 2px 0; color: #14532d; }\n  .subtitle { font-size: 12px; color: #5b6472; margin: 0 0 16px 0; }\n  .card { border: 1px solid #e3e6ec; border-radius: 7px; margin-bottom: 14px; page-break-inside: avoid; overflow: hidden; }\n  .card-header { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; color: #5b6472; font-weight: 700; padding: 8px 16px; background-color: #f7f8fb; border-bottom: 1px solid #e3e6ec; }\n  .card-body { padding: 12px 16px; }\n  .card-body p { margin: 0; font-size: 12.5px; line-height: 1.48; color: #2a2f3a; }\n  .prop-grid { display: flex; gap: 24px; font-size: 12px; }\n  .prop-grid div strong { display: block; color: #5b6472; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }\n  ul.assumptions-list { margin: 0; padding-left: 16px; font-size: 11.8px; line-height: 1.42; color: #2a2f3a; }\n  ul.assumptions-list li { margin-bottom: 4px; }\n  table.items-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }\n  table.items-table th { text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.4px; color: #5b6472; padding: 7px 16px; background-color: #f7f8fb; }\n  table.items-table td { padding: 6px 16px; border-top: 1px solid #ecedf1; vertical-align: middle; }\n  table.items-table tr { page-break-inside: avoid; }\n  .item-desc { font-weight: 600; color: #1f2430; }\n  .item-qty, .item-rate { color: #3a4050; white-space: nowrap; }\n  .item-total { font-weight: 700; color: #14532d; white-space: nowrap; text-align: right; }\n  .totals-box { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; padding: 10px 16px; background-color: #f7f8fb; border-top: 1px solid #e3e6ec; font-size: 12px; }\n  .totals-box .grand-total { font-size: 16px; font-weight: 800; color: #14532d; margin-top: 4px; }\n  .footer { padding-top: 8px; border-top: 1px solid #dfe3ea; font-size: 9px; color: #9aa1ad; display: flex; justify-content: space-between; }\n  .valid-badge { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #14532d; background-color: #d9f2e3; padding: 2px 9px; border-radius: 12px; margin-bottom: 7px; }\n</style>\n</head>\n<body>\n  <div class=\"page\">\n    <div class=\"header\">\n      <div class=\"brand\"><div class=\"brand-mark\">{{ $json.companyInitial }}</div><div>{{ $json.brandName || $json.companyName }}</div></div>\n      <div class=\"quote-meta\">\n        <div class=\"prospect-name\">{{ $json.prospectName }}</div>\n        <div>{{ $json.propertyAddress }}</div>\n      </div>\n    </div>\n    <h1 class=\"title\">Solar Installation Quote</h1>\n    <p class=\"subtitle\">Generated {{ $json.generatedDateStr }} &middot; Quote Ref {{ $json.enquiryId }}</p>\n\n    <div class=\"card\">\n      <div class=\"card-body\">\n        <span class=\"valid-badge\">Valid until {{ $json.validUntilStr }}</span>\n        <p>{{ $json.scopeSummary }}</p>\n      </div>\n    </div>\n\n    <div class=\"card\">\n      <div class=\"card-header\">Property Details</div>\n      <div class=\"card-body\">\n        <div class=\"prop-grid\">\n          <div><strong>Address</strong>{{ $json.propertyAddress }}</div>\n          <div><strong>Property Size</strong>{{ $json.propertySizeSqFt }} sq ft</div>\n          <div><strong>Contact</strong>{{ $json.email }} &middot; {{ $json.phone }}</div>\n        </div>\n      </div>\n    </div>\n\n    <div class=\"card\">\n      <div class=\"card-header\">Clarifying Assumptions</div>\n      <div class=\"card-body\">\n        <ul class=\"assumptions-list\">\n          {{ $json.assumptionsListHtml }}\n        </ul>\n      </div>\n    </div>\n\n    <div class=\"card\">\n      <div class=\"card-header\">Quote Line Items</div>\n      <table class=\"items-table\">\n        <thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th style=\"text-align:right\">Total</th></tr></thead>\n        <tbody>\n          {{ $json.lineItemsTableRowsHtml }}\n        </tbody>\n      </table>\n      <div class=\"totals-box\">\n        <div>Subtotal: {{ $json.subtotalFmt }}</div>\n        <div>Discount ({{ $json.discountPct }}%): -{{ $json.discountAmountFmt }}</div>\n        <div class=\"grand-total\">Total: {{ $json.grandTotalFmt }}</div>\n      </div>\n    </div>\n\n    <div class=\"footer\">\n      <div>This quote is valid for 30 days from the date above. Final scope subject to on-site survey. Reference: {{ $json.runId }}.</div>\n      <div>Generated automatically &mdash; reference implementation.</div>\n    </div>\n  </div>\n</body>\n</html>"
+      }
+    },
+    {
+      "id": "21ea0f8c-2583-4fe0-9b73-ba62955f67da",
+      "name": "Convert HTML to Binary File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const html = $input.first().json.html;\nconst base64 = Buffer.from(html, 'utf-8').toString('base64');\nreturn [{\n  json: {},\n  binary: {\n    data: {\n      data: base64,\n      mimeType: 'text/html',\n      fileName: 'index.html',\n      fileExtension: 'html',\n    },\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "b5ac3180-3f37-47c0-8ec6-7390d75b82ba",
+      "name": "PDF Engine: Gotenberg or API?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1440, 300],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 },
+          "conditions": [ { "leftValue": "={{ $('Prepare HTML Quote Data').item.json.pdfEngine }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "gotenberg" } ]
+        }
+      }
+    },
+    {
+      "id": "221f9eef-4c2a-4855-b4ad-c8eb031c7878",
+      "name": "Convert HTML to PDF (Gotenberg)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1740, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare HTML Quote Data').item.json.gotenbergUrl }}/forms/chromium/convert/html",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": { "parameters": [ { "parameterType": "formBinaryData", "name": "files", "inputDataFieldName": "data" }, { "parameterType": "formData", "name": "printBackground", "value": "true" } ] },
+        "options": { "response": { "response": { "fullResponse": false, "neverError": false, "responseFormat": "file", "outputPropertyName": "data" } }, "timeout": 30000 }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "id": "27d06faa-64ff-4620-8699-c69b9760ec51",
+      "name": "Convert HTML to PDF (PDFShift API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1740, 420],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare HTML Quote Data').item.json.pdfApiEndpoint }}",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"source\": $('Build Branded HTML Quote').item.json.html } }}",
+        "options": { "response": { "response": { "fullResponse": false, "neverError": false, "responseFormat": "file", "outputPropertyName": "data" } }, "timeout": 30000 }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "e60bba03-73b4-4c9a-9969-57f5bf024f3f",
+      "name": "Format PDFShift Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1740, 560],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json;\nconst rawMsg = raw.error || raw.message || (raw.error && raw.error.message) || JSON.stringify(raw);\nconst friendly = 'PDF rendering via the hosted API (PDFShift) failed: ' + rawMsg + '. If the PDFShift credential has not been configured yet, add a Header Auth credential (Header Name: X-API-Key, Header Value: your PDFShift key) to the \"Convert HTML to PDF (PDFShift API)\" node, or set Config.pdfEngine back to \"gotenberg\".';\nreturn [{ json: { friendlyError: friendly } }];\n"
+      }
+    },
+    { "id": "3744c398-c2ed-4445-9978-eae76e27fdac", "name": "Fail - PDF API Engine Error", "type": "n8n-nodes-base.stopAndError", "typeVersion": 1, "position": [2040, 560], "parameters": { "errorType": "errorMessage", "errorMessage": "={{ $json.friendlyError }}" } },
+    { "id": "07be1b76-fbf0-47e4-aee1-2836b8132a8c", "name": "Sticky Note 60865635", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [190, 250], "parameters": { "content": "## QTD - Render Quote PDF\nCalled by the main workflow via Execute Sub-workflow. Pure function: quote data in, PDF binary out. Same swappable-engine architecture as Demo 1's CRG - Render Report PDF.", "color": 4, "width": 600, "height": 200 } },
+    { "id": "4bee464c-a68f-4261-8f7d-9493222a9d05", "name": "Sticky Note Gotenberg Option", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [1660, 60], "parameters": { "content": "Option A: Self-hosted Gotenberg. No per-document cost, documents never leave your infrastructure. Requires Docker; works on self-hosted n8n only, not n8n Cloud. This is the default engine (Config.pdfEngine = gotenberg).", "color": 4, "width": 340, "height": 200 } },
+    { "id": "dc3636f6-f1ba-4981-9947-9ec646bb44df", "name": "Sticky Note PDFShift Option", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [1660, 640], "parameters": { "content": "Option B: Hosted API (PDFShift). Works anywhere including n8n Cloud, no infrastructure to run. Per-document cost (free tier: 50 documents per month, no card required, then paid). Switch by setting Config.pdfEngine to api. Authenticated via an httpHeaderAuth credential (header name X-API-Key), never a hardcoded key.\n\nSTATUS: built and configured, but not credentialed or live-tested in this reference instance.\n\nTwo failure layers: (1) if the credential is entirely missing/unbound, n8n rejects the run before this node executes at all -- QTD - Error Alert detects that specific case and rewrites the alert into a plain-language message telling you to add the credential. (2) if a credential IS configured but the call still fails, that is a normal node error, caught here by Format PDFShift Failure / Fail - PDF API Engine Error.", "color": 5, "width": 360, "height": 340 } }
+  ],
+  "connections": {
+    "Receive Quote Data": { "main": [ [ { "node": "Prepare HTML Quote Data", "type": "main", "index": 0 } ] ] },
+    "Prepare HTML Quote Data": { "main": [ [ { "node": "Build Branded HTML Quote", "type": "main", "index": 0 } ] ] },
+    "Build Branded HTML Quote": { "main": [ [ { "node": "Convert HTML to Binary File", "type": "main", "index": 0 } ] ] },
+    "Convert HTML to Binary File": { "main": [ [ { "node": "PDF Engine: Gotenberg or API?", "type": "main", "index": 0 } ] ] },
+    "PDF Engine: Gotenberg or API?": { "main": [ [ { "node": "Convert HTML to PDF (Gotenberg)", "type": "main", "index": 0 } ], [ { "node": "Convert HTML to PDF (PDFShift API)", "type": "main", "index": 0 } ] ] },
+    "Convert HTML to PDF (PDFShift API)": { "main": [ null, [ { "node": "Format PDFShift Failure", "type": "main", "index": 0 } ] ] },
+    "Format PDFShift Failure": { "main": [ [ { "node": "Fail - PDF API Engine Error", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "REPLACE_WITH_ERROR_ALERT_WORKFLOW_ID"
+  },
+  "pinData": {}
+}

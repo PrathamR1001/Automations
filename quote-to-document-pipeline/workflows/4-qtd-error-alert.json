@@ -1,0 +1,73 @@
+{
+  "name": "QTD - Error Alert",
+  "nodes": [
+    { "id": "ad74d13c-e5e7-429c-91bc-c8d4c187bcec", "name": "Catch Workflow Errors", "type": "n8n-nodes-base.errorTrigger", "typeVersion": 1, "position": [240, 300], "parameters": {} },
+    {
+      "id": "e8182b50-94bc-4000-8d76-406627cdfabf",
+      "name": "Format Alert Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [540, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const err = $input.first().json;\nconst rawMessage = (err.execution && err.execution.error && err.execution.error.message) || 'Unknown error';\nconst failingNode = (err.execution && err.execution.error && err.execution.error.node && err.execution.error.node.name) || 'Unknown node';\nconst runId = (err.execution && err.execution.id) || 'unknown';\nconst workflowName = (err.workflow && err.workflow.name) || 'unknown';\nconst executionUrl = (err.execution && err.execution.url) || '';\n\nlet errorMessage = rawMessage;\n\nif (failingNode === 'Convert HTML to PDF (PDFShift API)' && /invalid credential/i.test(rawMessage)) {\n  errorMessage = 'The PDF engine is set to \"api\" (PDFShift) but its credential is not configured in n8n. Add a Header Auth credential (Header Name: X-API-Key, Header Value: your PDFShift key) to the \"Convert HTML to PDF (PDFShift API)\" node, or set Config.pdfEngine back to \"gotenberg\" to use the self-hosted engine instead. (Original n8n error: ' + rawMessage + ')';\n}\n\nreturn [{\n  json: {\n    runId: runId,\n    workflowName: workflowName,\n    failingNode: failingNode,\n    errorMessage: errorMessage,\n    executionUrl: executionUrl,\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "865c9934-5809-43e7-b336-16acc96c3a31",
+      "name": "Send Failure Alert Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [840, 300],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "you@youragency.com",
+        "subject": "=QTD Alert: Workflow Failed — {{ $json.workflowName }}",
+        "emailType": "html",
+        "message": "=<h2 style=\"color:#b23b3b;\">Quote to Document Pipeline — Run Failed</h2><p><strong>Workflow:</strong> {{ $json.workflowName }}</p><p><strong>Run / Execution ID:</strong> {{ $json.runId }}</p><p><strong>Failing node:</strong> {{ $json.failingNode }}</p><p><strong>Error message:</strong> {{ $json.errorMessage }}</p><p><a href=\"{{ $json.executionUrl }}\">View execution in n8n</a></p>",
+        "options": { "appendAttribution": false }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_ME_GMAIL_CRED_ID", "name": "Gmail account" } }
+    },
+    {
+      "id": "e0a0400f-80f2-4b97-b8e9-30a1825d9e56",
+      "name": "Log Failed Run",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1140, 300],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_LOG_RUN_WORKFLOW_ID", "cachedResultName": "QTD - Log Run" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true,
+          "value": { "runId": "={{ $('Format Alert Message').item.json.runId }}", "prospectName": "={{ $('Format Alert Message').item.json.workflowName }}", "quoteTotal": 0, "status": "failed", "durationMs": 0, "error": "={{ $('Format Alert Message').item.json.errorMessage }}" },
+          "schema": [
+            { "id": "runId", "displayName": "runId", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "prospectName", "displayName": "prospectName", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "quoteTotal", "displayName": "quoteTotal", "type": "number", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "status", "displayName": "status", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "durationMs", "displayName": "durationMs", "type": "number", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true },
+            { "id": "error", "displayName": "error", "type": "string", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true }
+          ]
+        }
+      }
+    },
+    { "id": "0866b77f-c005-4aad-8736-34184bdcbc40", "name": "Sticky Note 5f90b81a", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [190, 250], "parameters": { "content": "## QTD - Error Alert\nSet as the Error Workflow (Settings) on Quote to Document Pipeline, QTD - Render Quote PDF, and QTD - Signature Callback Receiver. n8n fires this automatically whenever any of those workflows fails a production run.\n\nEmails the ops inbox directly with the failing node, error message, and the original run/execution ID, then logs a failed row via QTD - Log Run.", "color": 5, "width": 1200, "height": 200 } }
+  ],
+  "connections": {
+    "Catch Workflow Errors": { "main": [ [ { "node": "Format Alert Message", "type": "main", "index": 0 } ] ] },
+    "Format Alert Message": { "main": [ [ { "node": "Send Failure Alert Email", "type": "main", "index": 0 } ] ] },
+    "Send Failure Alert Email": { "main": [ [ { "node": "Log Failed Run", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

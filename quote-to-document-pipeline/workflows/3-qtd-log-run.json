@@ -1,0 +1,74 @@
+{
+  "name": "QTD - Log Run",
+  "nodes": [
+    {
+      "id": "33078b8f-995d-454e-a630-04318a4c1efd",
+      "name": "Receive Run Data",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            { "name": "runId", "type": "string" },
+            { "name": "prospectName", "type": "string" },
+            { "name": "quoteTotal", "type": "number" },
+            { "name": "status", "type": "string" },
+            { "name": "durationMs", "type": "number" },
+            { "name": "error", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c2cc849f-77e2-46bd-a969-64071228f372",
+      "name": "Upsert Run Log Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [540, 300],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": { "__rl": true, "mode": "id", "value": "YOUR_RUNLOG_DATA_TABLE_ID", "cachedResultName": "QTD_RunLog" },
+        "matchType": "allConditions",
+        "filters": { "conditions": [ { "keyName": "runId", "condition": "eq", "keyValue": "={{ $json.runId }}" } ] },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["runId"],
+          "value": {
+            "runId": "={{ $json.runId }}",
+            "timestamp": "={{ $now.toISO() }}",
+            "prospectName": "={{ $json.prospectName }}",
+            "quoteTotal": "={{ $json.quoteTotal }}",
+            "status": "={{ $json.status }}",
+            "durationMs": "={{ $json.durationMs }}",
+            "error": "={{ $json.error }}"
+          },
+          "schema": [
+            { "id": "runId", "displayName": "runId", "type": "string", "defaultMatch": true, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "timestamp", "displayName": "timestamp", "type": "dateTime", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "prospectName", "displayName": "prospectName", "type": "string", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "quoteTotal", "displayName": "quoteTotal", "type": "number", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "status", "displayName": "status", "type": "string", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "durationMs", "displayName": "durationMs", "type": "number", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false },
+            { "id": "error", "displayName": "error", "type": "string", "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "required": false }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cae28510-97d8-42e6-af65-9b2a239d168f",
+      "name": "Sticky Note 26865ece",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [190, 250],
+      "parameters": { "content": "## QTD - Log Run\nCalled by the main workflow (on skip/success), by QTD - Error Alert (on failure), and by the follow-up/signature-callback branches (reminder_sent / signed events, each with a suffixed runId so they do not overwrite the original success row). Upserts by runId, so retrying the exact same runId overwrites its own row rather than duplicating.", "color": 4, "width": 600, "height": 200 }
+    }
+  ],
+  "connections": {
+    "Receive Run Data": { "main": [ [ { "node": "Upsert Run Log Row", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
